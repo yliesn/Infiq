@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factures — Infiq</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="bg-light">
+
+<div class="d-flex">
+  <div id="nav-placeholder"></div>
+
+  <main class="flex-grow-1 p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="mb-0 fw-bold">Factures</h4>
+      <a href="document-editor.html?type=invoice" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Nouvelle facture
+      </a>
+    </div>
+
+    <!-- Filtres statut -->
+    <ul class="nav nav-pills mb-3" id="status-tabs">
+      <li class="nav-item"><a class="nav-link active" href="#" data-status="">Toutes</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-status="draft">Brouillons</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-status="sent">Envoyées</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-status="paid">Payées</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-status="cancelled">Annulées</a></li>
+    </ul>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-3">N°</th>
+                <th>Client</th>
+                <th>Date émission</th>
+                <th>Échéance</th>
+                <th class="text-end">Montant HT</th>
+                <th class="text-end pe-3">Montant TTC</th>
+                <th>Statut</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="docs-table">
+              <tr><td colspan="8" class="text-center text-muted py-4">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/app.js"></script>
+<script>
+  initLayout('invoices');
+
+  let currentStatus = '';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('status-tabs').addEventListener('click', e => {
+      const link = e.target.closest('[data-status]');
+      if (!link) return;
+      e.preventDefault();
+      document.querySelectorAll('#status-tabs .nav-link').forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+      currentStatus = link.dataset.status;
+      load();
+    });
+    load();
+  });
+
+  async function load() {
+    const tbody = document.getElementById('docs-table');
+    try {
+      let url = '/documents.php?type=invoice';
+      if (currentStatus) url += '&status=' + currentStatus;
+      const docs = await apiFetch(url);
+
+      if (!docs.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Aucune facture</td></tr>';
+        return;
+      }
+      tbody.innerHTML = docs.map(d => `
+        <tr>
+          <td class="ps-3 fw-semibold">${esc(d.number)}</td>
+          <td>${esc(clientName(d))}</td>
+          <td>${formatDate(d.issue_date)}</td>
+          <td>${d.due_date ? formatDate(d.due_date) : '—'}</td>
+          <td class="text-end">${formatMoney(d.subtotal_ht)}</td>
+          <td class="text-end pe-3">${formatMoney(d.total_ttc)}</td>
+          <td>${statusBadge('invoice', d.status)}</td>
+          <td class="text-end pe-3">
+            <a href="${API}/pdf.php?id=${d.id}&token=${getToken()}" target="_blank" class="btn btn-sm btn-outline-danger me-1" title="PDF">
+              <i class="bi bi-file-earmark-pdf"></i>
+            </a>
+            ${d.status === 'draft' ? `
+              <a href="document-editor.html?id=${d.id}" class="btn btn-sm btn-outline-secondary me-1" title="Éditer">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <button class="btn btn-sm btn-outline-primary me-1" title="Marquer envoyée" onclick="setStatus(${d.id}, 'sent')">
+                <i class="bi bi-send"></i>
+              </button>
+            ` : ''}
+            ${d.status === 'sent' ? `
+              <button class="btn btn-sm btn-outline-success" title="Marquer payée" onclick="setStatus(${d.id}, 'paid')">
+                <i class="bi bi-check-circle"></i>
+              </button>
+            ` : ''}
+            ${d.status === 'draft' ? `
+              <button class="btn btn-sm btn-outline-danger" title="Annuler" onclick="cancelDoc(${d.id})">
+                <i class="bi bi-x-circle"></i>
+              </button>
+            ` : ''}
+          </td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  async function setStatus(id, status) {
+    const labels = { sent: 'Marquer cette facture comme envoyée ?', paid: 'Marquer cette facture comme payée ?' };
+    if (!await confirmAction(labels[status])) return;
+    try {
+      await apiFetch(`/documents.php?id=${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      toast(status === 'paid' ? 'Facture marquée payée' : 'Facture envoyée (verrouillée)');
+      load();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function cancelDoc(id) {
+    if (!await confirmAction('Annuler cette facture ?')) return;
+    try {
+      await apiFetch(`/documents.php?id=${id}`, { method: 'DELETE' });
+      toast('Facture annulée');
+      load();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cosmos — Three.js Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: monospace; }
+  #canvas-container {
+    width: 100vw; height: 100vh;
+    position: relative; cursor: grab;
+  }
+  #canvas-container:active { cursor: grabbing; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #ui {
+    position: absolute; top: 20px; left: 20px;
+    color: #fff; font-size: 13px; opacity: 0.7;
+    pointer-events: none; user-select: none;
+  }
+  #ui .title { font-size: 15px; font-weight: bold; letter-spacing: .1em; margin-bottom: 6px; }
+  #ui .hint  { font-size: 11px; opacity: 0.55; }
+  #info-panel {
+    position: absolute; bottom: 20px; right: 20px;
+    color: #fff; font-size: 12px; font-family: monospace;
+    opacity: 0; transition: opacity 0.4s;
+    background: rgba(0,0,0,0.55);
+    padding: 10px 16px; border-radius: 10px;
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.08);
+    pointer-events: none;
+  }
+  #info-panel .name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+  #info-panel .desc { opacity: 0.65; }
+  #controls {
+    position: absolute; bottom: 20px; left: 20px;
+    display: flex; gap: 8px;
+  }
+  #controls button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; font-family: monospace; font-size: 11px;
+    padding: 6px 12px; border-radius: 6px;
+    cursor: pointer; transition: background .2s;
+  }
+  #controls button:hover { background: rgba(255,255,255,0.16); }
+  #speed-display {
+    position: absolute; top: 20px; right: 20px;
+    color: rgba(255,255,255,0.45); font-size: 11px; font-family: monospace;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="canvas-container">
+  <canvas id="threeCanvas"></canvas>
+
+  <div id="ui">
+    <div class="title">🌌 COSMOS</div>
+    <div class="hint">Glisser pour orbiter</div>
+    <div class="hint">Scroll pour zoomer</div>
+    <div class="hint">Clic sur une planète</div>
+  </div>
+
+  <div id="speed-display" id="speed-display">Vitesse : 1×</div>
+
+  <div id="info-panel">
+    <div class="name" id="planet-name"></div>
+    <div class="desc" id="planet-info"></div>
+  </div>
+
+  <div id="controls">
+    <button id="btn-slower">⏪ Ralentir</button>
+    <button id="btn-pause">⏸ Pause</button>
+    <button id="btn-faster">⏩ Accélérer</button>
+    <button id="btn-reset">🎯 Reset vue</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+
+  const container = document.getElementById('canvas-container');
+  const canvas    = document.getElementById('threeCanvas');
+  const infoPanel = document.getElementById('info-panel');
+  const pName     = document.getElementById('planet-name');
+  const pInfo     = document.getElementById('planet-info');
+  const speedDisp = document.getElementById('speed-display');
+
+  let W = container.clientWidth, H = container.clientHeight;
+
+  // ─── RENDERER ────────────────────────────────────────────────
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(W, H);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 2000);
+  camera.position.set(0, 40, 120);
+  camera.lookAt(0, 0, 0);
+
+  window.addEventListener('resize', () => {
+    W = container.clientWidth; H = container.clientHeight;
+    camera.aspect = W / H; camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+  });
+
+  // ─── NÉBULEUSE (sphere inversée + GLSL) ──────────────────────
+  const nebMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      varying vec3 vPos;
+      void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }
+    `,
+    fragmentShader: `
+      varying vec3 vPos;
+      uniform float uTime;
+      float hash(vec3 p) {
+        p = fract(p * vec3(.1031, .103, .0973));
+        p += dot(p, p.yxz + 33.33);
+        return fract((p.x + p.y) * p.z);
+      }
+      float noise(vec3 p) {
+        vec3 i = floor(p), f = fract(p);
+        f = f * f * (3. - 2. * f);
+        float a = hash(i), b = hash(i + vec3(1,0,0));
+        float c = hash(i + vec3(0,1,0)), d = hash(i + vec3(1,1,0));
+        float e = hash(i + vec3(0,0,1)), g = hash(i + vec3(1,0,1));
+        float h = hash(i + vec3(0,1,1)), k = hash(i + vec3(1,1,1));
+        return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y), mix(mix(e,g,f.x),mix(h,k,f.x),f.y), f.z);
+      }
+      void main() {
+        vec3 d = normalize(vPos);
+        float t = uTime * .04;
+        float n1 = noise(d * 2. + t);
+        float n2 = noise(d * 4. - t * .7 + 1.5);
+        float n3 = noise(d * 8. + t * .3 + 3.0);
+        float n  = n1 * .5 + n2 * .3 + n3 * .2;
+        vec3 col = mix(vec3(.05,.0,.15), vec3(.0,.05,.2), n1);
+        col = mix(col, vec3(.15,.02,.08), n2 * .6);
+        col = mix(col, vec3(.0,.1,.12),  n3 * .4);
+        col += vec3(.02,.01,.05) * smoothstep(.6, .9, n);
+        float star = step(.98, hash(floor(d * 300.)));
+        float br   = hash(floor(d * 300. + .5)) * 1.5 + .5;
+        col += vec3(br) * star;
+        gl_FragColor = vec4(col, 1.);
+      }
+    `
+  });
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(800, 32, 32), nebMat));
+
+  // ─── CHAMP D'ÉTOILES ─────────────────────────────────────────
+  const starCount = 3000;
+  const starPos   = new Float32Array(starCount * 3);
+  const starSize  = new Float32Array(starCount);
+  for (let i = 0; i < starCount; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 200 + Math.random() * 400;
+    starPos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    starPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    starPos[i*3+2] = r * Math.cos(phi);
+    starSize[i] = Math.random() * 2 + 0.5;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute('size',     new THREE.BufferAttribute(starSize, 1));
+  const starMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      attribute float size; uniform float uTime; varying float vB;
+      void main() {
+        vB = .5 + .5 * sin(uTime * 1.5 + position.x * .01 + position.y * .01);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
+        gl_PointSize = size * (1. + .3 * sin(uTime * 2. + position.z * .02));
+      }`,
+    fragmentShader: `
+      varying float vB;
+      void main() {
+        float d = length(gl_PointCoord - .5) * 2.;
+        float a = 1. - smoothstep(.0, .8, d);
+        gl_FragColor = vec4(vec3(.8,.9,1.) * vB, a * vB);
+      }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  scene.add(new THREE.Points(starGeo, starMat));
+
+  // ─── SOLEIL ───────────────────────────────────────────────────
+  const sunMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      varying vec2 vUv; varying vec3 vNorm;
+      void main() { vUv = uv; vNorm = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+    fragmentShader: `
+      varying vec2 vUv; varying vec3 vNorm; uniform float uTime;
+      float noise(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+      float sn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); float a=noise(i),b=noise(i+vec2(1,0)),c=noise(i+vec2(0,1)),d=noise(i+vec2(1,1)); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+      void main() {
+        vec2 uv = vUv * 6. + uTime * .1;
+        float n = sn(uv)*.5 + sn(uv*2.+1.7)*.25 + sn(uv*4.+3.2)*.125;
+        vec3 col = mix(vec3(1.,.5,.1), vec3(1.,.95,.4), n);
+        col = mix(col, vec3(1.,1.,.9), pow(max(0., dot(vNorm, vec3(0,0,1))), 3.));
+        col += vec3(.8,.3,.0) * smoothstep(.5, .7, n);
+        gl_FragColor = vec4(col, 1.);
+      }`
+  });
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(8, 64, 64), sunMat);
+  scene.add(sun);
+
+  // Corona
+  const coronaMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `varying vec3 vN; void main(){ vN=normalize(normalMatrix*normal); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader: `
+      varying vec3 vN; uniform float uTime;
+      void main(){
+        float rim = 1. - abs(dot(vN, vec3(0,0,1)));
+        float pulse = .8 + .2 * sin(uTime * 2.);
+        vec3 col = mix(vec3(1.,.4,.0), vec3(1.,.9,.3), rim);
+        gl_FragColor = vec4(col, pow(rim, 1.5) * .6 * pulse);
+      }`
+  });
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 32), coronaMat));
+
+  scene.add(new THREE.PointLight(0xfff5e0, 3, 500));
+  scene.add(new THREE.AmbientLight(0x111133, 0.8));
+
+  // ─── PLANÈTES ─────────────────────────────────────────────────
+  const planetData = [
+    { name:'Mercure', r:1.5, dist:18,  speed:1.60, color:0x8a7e6e, emissive:0x3a2e2e, info:'Planète la plus proche du Soleil — 88 jours pour orbiter' },
+    { name:'Vénus',   r:2.5, dist:28,  speed:1.17, color:0xe8c87a, emissive:0x5a3a10, info:'La planète la plus chaude du système — 465 °C en moyenne' },
+    { name:'Terre',   r:2.8, dist:40,  speed:1.00, color:0x3a8fc1, emissive:0x0a2a0a, info:'Notre magnifique planète bleue — 1 lune', moon:true },
+    { name:'Mars',    r:2.0, dist:55,  speed:0.80, color:0xb5442a, emissive:0x3a1010, info:'La planète rouge — 2 lunes (Phobos & Déimos)' },
+    { name:'Jupiter', r:5.5, dist:78,  speed:0.43, color:0xc8956e, emissive:0x2a1a0a, info:'La plus grande des planètes — 95 lunes connues' },
+    { name:'Saturne', r:4.5, dist:100, speed:0.32, color:0xe8d09a, emissive:0x3a2a10, info:'La reine des anneaux — densité inférieure à l\'eau', rings:true },
+    { name:'Uranus',  r:3.2, dist:122, speed:0.23, color:0x7de8e8, emissive:0x0a2a2a, info:'Planète inclinée à 98° — orbite en 84 ans' },
+    { name:'Neptune', r:3.0, dist:142, speed:0.18, color:0x3a5fd8, emissive:0x050520, info:'La planète la plus venteuse — vents à 2 100 km/h' },
+  ];
+
+  const planets = [];
+  planetData.forEach(pd => {
+    // Orbite
+    const pts = [];
+    for (let i = 0; i <= 128; i++) {
+      const a = i / 128 * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * pd.dist, 0, Math.sin(a) * pd.dist));
+    }
+    scene.add(new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0x334466, transparent: true, opacity: .25 })
+    ));
+
+    // Planète
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(pd.r, 32, 32),
+      new THREE.MeshStandardMaterial({ color: pd.color, emissive: pd.emissive, roughness: .8, metalness: .1 })
+    );
+    mesh.userData = { ...pd, angle: Math.random() * Math.PI * 2 };
+
+    if (pd.rings) {
+      const rMesh = new THREE.Mesh(
+        new THREE.RingGeometry(pd.r * 1.4, pd.r * 2.5, 64),
+        new THREE.MeshBasicMaterial({ color: 0xd4b060, side: THREE.DoubleSide, transparent: true, opacity: .5 })
+      );
+      rMesh.rotation.x = Math.PI * .4;
+      mesh.add(rMesh);
+    }
+    if (pd.moon) {
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(.7, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 1 })
+      );
+      moon.userData = { isMoon: true, angle: 0, dist: 5 };
+      mesh.add(moon);
+    }
+
+    scene.add(mesh);
+    planets.push(mesh);
+  });
+
+  // ─── CEINTURE D'ASTÉROÏDES ────────────────────────────────────
+  const astCount = 800;
+  const astPos   = new Float32Array(astCount * 3);
+  const astSize  = new Float32Array(astCount);
+  for (let i = 0; i < astCount; i++) {
+    const a = Math.random() * Math.PI * 2, r = 63 + Math.random() * 8;
+    astPos[i*3] = Math.cos(a) * r; astPos[i*3+1] = (Math.random()-.5)*2; astPos[i*3+2] = Math.sin(a) * r;
+    astSize[i] = Math.random() * 1.5 + .3;
+  }
+  const astGeo = new THREE.BufferGeometry();
+  astGeo.setAttribute('position', new THREE.BufferAttribute(astPos, 3));
+  astGeo.setAttribute('size',     new THREE.BufferAttribute(astSize, 1));
+  const asteroids = new THREE.Points(astGeo, new THREE.ShaderMaterial({
+    vertexShader:   `attribute float size; void main(){ gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_PointSize=size; }`,
+    fragmentShader: `void main(){ float d=length(gl_PointCoord-.5)*2.; float a=1.-smoothstep(.6,1.,d); gl_FragColor=vec4(.6,.55,.5,a*.8); }`,
+    transparent: true, depthWrite: false
+  }));
+  scene.add(asteroids);
+
+  // ─── CONTRÔLES CAMÉRA (manual spherical) ──────────────────────
+  let isDragging = false, lastMouse = { x: 0, y: 0 };
+  const spherical = { theta: 0, phi: Math.PI / 3, r: 120 };
+  const sphericalDefault = { theta: 0, phi: Math.PI / 3, r: 120 };
+
+  container.addEventListener('mousedown', e => { isDragging = true; lastMouse = { x: e.clientX, y: e.clientY }; });
+  window.addEventListener('mouseup',   () => { isDragging = false; });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    spherical.theta -= (e.clientX - lastMouse.x) * .005;
+    spherical.phi    = Math.max(.1, Math.min(Math.PI - .1, spherical.phi + (e.clientY - lastMouse.y) * .005));
+    lastMouse = { x: e.clientX, y: e.clientY };
+  });
+  container.addEventListener('wheel', e => {
+    e.preventDefault();
+    spherical.r = Math.max(20, Math.min(280, spherical.r + e.deltaY * .1));
+  }, { passive: false });
+
+  // Touch
+  let lastTouch = null;
+  container.addEventListener('touchstart', e => { lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, { passive: true });
+  container.addEventListener('touchmove',  e => {
+    e.preventDefault();
+    if (!lastTouch) return;
+    spherical.theta -= (e.touches[0].clientX - lastTouch.x) * .005;
+    spherical.phi    = Math.max(.1, Math.min(Math.PI - .1, spherical.phi + (e.touches[0].clientY - lastTouch.y) * .005));
+    lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: false });
+
+  // ─── HOVER / RAYCASTING ───────────────────────────────────────
+  const raycaster = new THREE.Raycaster();
+  const mouse2    = new THREE.Vector2();
+  container.addEventListener('mousemove', e => {
+    const rect = container.getBoundingClientRect();
+    mouse2.x = ((e.clientX - rect.left) / W) * 2 - 1;
+    mouse2.y = -((e.clientY - rect.top) / H) * 2 + 1;
+    raycaster.setFromCamera(mouse2, camera);
+    const hits = raycaster.intersectObjects(planets);
+    if (hits.length > 0) {
+      const pd = hits[0].object.userData;
+      pName.textContent = pd.name || '';
+      pInfo.textContent = pd.info || '';
+      infoPanel.style.opacity = '1';
+    } else {
+      infoPanel.style.opacity = '0';
+    }
+  });
+
+  // ─── CONTRÔLES VITESSE / PAUSE ────────────────────────────────
+  let timeScale = 1, paused = false;
+  document.getElementById('btn-pause').addEventListener('click', function () {
+    paused = !paused;
+    this.textContent = paused ? '▶ Play' : '⏸ Pause';
+  });
+  document.getElementById('btn-faster').addEventListener('click', () => {
+    timeScale = Math.min(8, timeScale * 2);
+    speedDisp.textContent = 'Vitesse : ' + timeScale + '×';
+  });
+  document.getElementById('btn-slower').addEventListener('click', () => {
+    timeScale = Math.max(0.125, timeScale / 2);
+    speedDisp.textContent = 'Vitesse : ' + timeScale + '×';
+  });
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    spherical.theta = sphericalDefault.theta;
+    spherical.phi   = sphericalDefault.phi;
+    spherical.r     = sphericalDefault.r;
+  });
+
+  // ─── BOUCLE D'ANIMATION ───────────────────────────────────────
+  let t = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    if (!paused) t += .004 * timeScale;
+
+    nebMat.uniforms.uTime.value    = t;
+    sunMat.uniforms.uTime.value    = t;
+    coronaMat.uniforms.uTime.value = t;
+    starMat.uniforms.uTime.value   = t;
+    sun.rotation.y = t * .3;
+
+    planets.forEach(p => {
+      const pd = p.userData;
+      if (!paused) pd.angle += pd.speed * .005 * timeScale;
+      p.position.x = Math.cos(pd.angle) * pd.dist;
+      p.position.z = Math.sin(pd.angle) * pd.dist;
+      p.rotation.y = t * .5;
+      p.children.forEach(ch => {
+        if (ch.userData && ch.userData.isMoon) {
+          if (!paused) ch.userData.angle += .04 * timeScale;
+          ch.position.x = Math.cos(ch.userData.angle) * ch.userData.dist;
+          ch.position.z = Math.sin(ch.userData.angle) * ch.userData.dist;
+        }
+      });
+    });
+
+    if (!paused) asteroids.rotation.y += .0001 * timeScale;
+
+    camera.position.x = spherical.r * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+    camera.position.y = spherical.r * Math.cos(spherical.phi);
+    camera.position.z = spherical.r * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+    camera.lookAt(0, 0, 0);
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Éditeur — Infiq</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .line-row td { vertical-align: middle; }
+    .line-row input, .line-row select { font-size: .875rem; }
+    .totals-box { min-width: 280px; }
+  </style>
+</head>
+<body class="bg-light">
+
+<div class="d-flex">
+  <div id="nav-placeholder"></div>
+
+  <main class="flex-grow-1 p-4">
+
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h4 class="mb-0 fw-bold" id="page-title">Nouveau document</h4>
+        <small class="text-muted" id="doc-number-display"></small>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" id="btn-back">
+          <i class="bi bi-arrow-left me-1"></i>Retour
+        </button>
+        <a id="btn-pdf" class="btn btn-outline-secondary d-none" target="_blank">
+          <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+        </a>
+        <button class="btn btn-primary" id="btn-save">
+          <i class="bi bi-floppy me-1"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+
+    <div id="locked-banner" class="alert alert-warning d-none">
+      <i class="bi bi-lock-fill me-2"></i>Ce document est <strong>verrouillé</strong> et ne peut plus être modifié.
+    </div>
+
+    <div id="alert-box" class="alert alert-danger d-none"></div>
+
+    <div class="row g-4">
+      <!-- Colonne gauche -->
+      <div class="col-lg-8">
+
+        <!-- Infos générales -->
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-white border-0 pt-3 pb-0">
+            <h6 class="fw-semibold mb-0">Informations générales</h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Client *</label>
+                <select id="f-client" class="form-select"></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Date d'émission *</label>
+                <input type="date" id="f-issue-date" class="form-control">
+              </div>
+              <div class="col-md-3" id="expiry-field">
+                <label class="form-label">Date de validité</label>
+                <input type="date" id="f-expiry-date" class="form-control">
+              </div>
+              <div class="col-md-3" id="due-field">
+                <label class="form-label">Échéance paiement</label>
+                <input type="date" id="f-due-date" class="form-control">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lignes -->
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between">
+            <h6 class="fw-semibold mb-0">Lignes</h6>
+            <button class="btn btn-sm btn-outline-primary" id="btn-add-line">
+              <i class="bi bi-plus me-1"></i>Ajouter une ligne
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table align-middle mb-0" id="lines-table">
+                <thead class="table-light">
+                  <tr>
+                    <th class="ps-3" style="min-width:180px">Libellé</th>
+                    <th style="min-width:80px">Qté</th>
+                    <th style="min-width:120px">PU HT (€)</th>
+                    <th style="min-width:100px">TVA</th>
+                    <th class="text-end" style="min-width:100px">Total HT</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="lines-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes & conditions -->
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Notes</label>
+                <textarea id="f-notes" class="form-control" rows="3" placeholder="Notes visibles sur le document…"></textarea>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Conditions de paiement</label>
+                <textarea id="f-conditions" class="form-control" rows="3" placeholder="Conditions générales…"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Colonne droite : totaux -->
+      <div class="col-lg-4">
+        <div class="card border-0 shadow-sm sticky-top totals-box" style="top:1rem">
+          <div class="card-header bg-white border-0 pt-3 pb-0">
+            <h6 class="fw-semibold mb-0">Récapitulatif</h6>
+          </div>
+          <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Total HT</span>
+              <span id="total-ht" class="fw-semibold">0,00 €</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">TVA</span>
+              <span id="total-vat">0,00 €</span>
+            </div>
+            <hr>
+            <div class="d-flex justify-content-between">
+              <span class="fw-bold fs-5">Total TTC</span>
+              <span id="total-ttc" class="fw-bold fs-5 text-primary">0,00 €</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/app.js"></script>
+<script>
+  initLayout(null);
+
+  const params  = new URLSearchParams(location.search);
+  const docId   = params.get('id') ? parseInt(params.get('id')) : null;
+  const docType = params.get('type') || 'quote'; // utilisé uniquement pour une création
+  let   isLocked = false;
+  let   services = [];
+
+  document.getElementById('btn-back').addEventListener('click', () => {
+    history.back();
+  });
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('btn-add-line').addEventListener('click', addLine);
+    document.getElementById('btn-save').addEventListener('click', saveDoc);
+    document.getElementById('f-issue-date').value = new Date().toISOString().slice(0, 10);
+
+    // Charger les services et les clients en parallèle
+    const [servicesData, clientsData] = await Promise.all([
+      apiFetch('/services.php').catch(() => []),
+      apiFetch('/clients.php').catch(() => []),
+    ]);
+    services = servicesData;
+
+    const sel = document.getElementById('f-client');
+    sel.innerHTML = '<option value="">— Sélectionner un client —</option>' +
+      clientsData.map(c => `<option value="${c.id}">${esc(c.company_name || `${c.first_name} ${c.last_name}`.trim())}</option>`).join('');
+
+    if (docId) {
+      await loadDoc(docId);
+    } else {
+      document.getElementById('page-title').textContent = docType === 'invoice' ? 'Nouvelle facture' : 'Nouveau devis';
+      const today = new Date();
+      if (docType === 'quote') {
+        const expiry = new Date(today);
+        expiry.setDate(expiry.getDate() + 30);
+        document.getElementById('f-expiry-date').value = expiry.toISOString().slice(0, 10);
+        document.getElementById('due-field').classList.add('d-none');
+      } else {
+        const due = new Date(today);
+        due.setDate(due.getDate() + 30);
+        document.getElementById('f-due-date').value = due.toISOString().slice(0, 10);
+        document.getElementById('expiry-field').classList.add('d-none');
+      }
+      addLine();
+    }
+  });
+
+  async function loadDoc(id) {
+    try {
+      const doc = await apiFetch(`/documents.php?id=${id}`);
+      isLocked = !!doc.locked_at;
+
+      document.getElementById('page-title').textContent =
+        (doc.type === 'invoice' ? 'Facture' : 'Devis') + ' · ' + doc.number;
+      document.getElementById('doc-number-display').textContent = doc.number;
+
+      const btnPdf = document.getElementById('btn-pdf');
+      btnPdf.href = `${API}/pdf.php?id=${id}&token=${getToken()}`;
+      btnPdf.classList.remove('d-none');
+
+      if (isLocked) {
+        document.getElementById('locked-banner').classList.remove('d-none');
+        document.getElementById('btn-save').classList.add('d-none');
+        setFormDisabled(true);
+      }
+
+      if (doc.type === 'quote') {
+        document.getElementById('due-field').classList.add('d-none');
+      } else {
+        document.getElementById('expiry-field').classList.add('d-none');
+      }
+
+      document.getElementById('f-client').value      = doc.client_id;
+      document.getElementById('f-issue-date').value  = doc.issue_date;
+      document.getElementById('f-expiry-date').value = doc.expiry_date || '';
+      document.getElementById('f-due-date').value    = doc.due_date    || '';
+      document.getElementById('f-notes').value       = doc.notes       || '';
+      document.getElementById('f-conditions').value  = doc.conditions  || '';
+
+      doc.lines.forEach(l => addLine(l));
+      recalc();
+    } catch (e) {
+      showAlert(e.message);
+    }
+  }
+
+  function addLine(line = null) {
+    const tbody = document.getElementById('lines-body');
+    const idx   = tbody.children.length;
+    const tr    = document.createElement('tr');
+    tr.className = 'line-row';
+
+    const serviceOptions = `<option value="">— Ligne libre —</option>` +
+      services.map(s => `<option value="${s.id}" data-price="${s.unit_price}" data-vat="${s.vat_rate}">${esc(s.label)}</option>`).join('');
+
+    tr.innerHTML = `
+      <td class="ps-3">
+        <select class="form-select form-select-sm mb-1 svc-select">${serviceOptions}</select>
+        <input type="text" class="form-control form-control-sm line-label" placeholder="Libellé *" value="${esc(line?.label || '')}">
+      </td>
+      <td><input type="number" class="form-control form-control-sm line-qty" min="0.001" step="0.001" value="${line?.qty ?? 1}"></td>
+      <td><input type="number" class="form-control form-control-sm line-price" min="0" step="0.01" placeholder="0.00" value="${line ? (line.unit_price / 100).toFixed(2) : ''}"></td>
+      <td>
+        <select class="form-select form-select-sm line-vat">
+          <option value="0" ${(line?.vat_rate ?? 2000) === 0    ? 'selected' : ''}>0 %</option>
+          <option value="550" ${(line?.vat_rate ?? 2000) === 550  ? 'selected' : ''}>5,5 %</option>
+          <option value="1000" ${(line?.vat_rate ?? 2000) === 1000 ? 'selected' : ''}>10 %</option>
+          <option value="2000" ${(line?.vat_rate ?? 2000) === 2000 ? 'selected' : ''}>20 %</option>
+        </select>
+      </td>
+      <td class="text-end line-total-ht">0,00 €</td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger btn-del-line"><i class="bi bi-trash"></i></button></td>
+    `;
+
+    // Auto-fill depuis service sélectionné
+    tr.querySelector('.svc-select').addEventListener('change', function () {
+      const opt = this.selectedOptions[0];
+      if (!opt.value) return;
+      const price = parseInt(opt.dataset.price) / 100;
+      const vat   = opt.dataset.vat;
+      tr.querySelector('.line-label').value = opt.textContent;
+      tr.querySelector('.line-price').value = price.toFixed(2);
+      tr.querySelector('.line-vat').value   = vat;
+      recalc();
+    });
+
+    tr.querySelector('.btn-del-line').addEventListener('click', () => { tr.remove(); recalc(); });
+    tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', recalc));
+
+    tbody.appendChild(tr);
+
+    if (line?.service_id) {
+      const sel = tr.querySelector('.svc-select');
+      for (const opt of sel.options) {
+        if (parseInt(opt.value) === line.service_id) { sel.value = opt.value; break; }
+      }
+    }
+
+    if (isLocked) setRowDisabled(tr, true);
+    recalc();
+  }
+
+  function recalc() {
+    let subHT = 0, vat = 0;
+
+    document.querySelectorAll('.line-row').forEach(tr => {
+      const qty   = parseFloat(tr.querySelector('.line-qty').value)   || 0;
+      const price = parseFloat(tr.querySelector('.line-price').value)  || 0;
+      const rate  = parseInt(tr.querySelector('.line-vat').value)      || 0;
+
+      const priceCents = Math.round(price * 100);
+      const totalHT    = Math.round(qty * priceCents);
+      const lineVat    = Math.round(totalHT * rate / 10000);
+
+      subHT += totalHT;
+      vat   += lineVat;
+
+      tr.querySelector('.line-total-ht').textContent = formatMoney(totalHT);
+    });
+
+    document.getElementById('total-ht').textContent  = formatMoney(subHT);
+    document.getElementById('total-vat').textContent = formatMoney(vat);
+    document.getElementById('total-ttc').textContent = formatMoney(subHT + vat);
+  }
+
+  async function saveDoc() {
+    const lines = [];
+    let valid = true;
+
+    document.querySelectorAll('.line-row').forEach(tr => {
+      const label = tr.querySelector('.line-label').value.trim();
+      const qty   = parseFloat(tr.querySelector('.line-qty').value);
+      const price = parseFloat(tr.querySelector('.line-price').value);
+      const vat   = parseInt(tr.querySelector('.line-vat').value);
+      const svcId = tr.querySelector('.svc-select').value;
+
+      if (!label || isNaN(qty) || isNaN(price)) { valid = false; return; }
+
+      lines.push({
+        service_id:  svcId ? parseInt(svcId) : null,
+        label,
+        qty,
+        unit_price:  Math.round(price * 100),
+        vat_rate:    vat,
+      });
+    });
+
+    if (!valid || !lines.length) {
+      showAlert('Chaque ligne doit avoir un libellé, une quantité et un prix.');
+      return;
+    }
+    if (!document.getElementById('f-client').value) {
+      showAlert('Veuillez sélectionner un client.');
+      return;
+    }
+
+    const type = docId
+      ? null
+      : docType;
+
+    const body = {
+      ...(docId ? {} : { type }),
+      client_id:   parseInt(document.getElementById('f-client').value),
+      issue_date:  document.getElementById('f-issue-date').value,
+      expiry_date: document.getElementById('f-expiry-date').value || null,
+      due_date:    document.getElementById('f-due-date').value    || null,
+      notes:       document.getElementById('f-notes').value       || null,
+      conditions:  document.getElementById('f-conditions').value  || null,
+      lines,
+    };
+
+    hideAlert();
+    document.getElementById('btn-save').disabled = true;
+
+    try {
+      if (docId) {
+        await apiFetch(`/documents.php?id=${docId}`, { method: 'PUT', body: JSON.stringify(body) });
+        toast('Document enregistré');
+      } else {
+        const newDoc = await apiFetch('/documents.php', { method: 'POST', body: JSON.stringify(body) });
+        toast('Document créé : ' + newDoc.number);
+        window.location.href = `document-editor.html?id=${newDoc.id}`;
+        return;
+      }
+    } catch (e) {
+      showAlert(e.message);
+    } finally {
+      document.getElementById('btn-save').disabled = false;
+    }
+  }
+
+  function setFormDisabled(disabled) {
+    document.querySelectorAll('#f-client, #f-issue-date, #f-expiry-date, #f-due-date, #f-notes, #f-conditions')
+      .forEach(el => el.disabled = disabled);
+    document.getElementById('btn-add-line').disabled = disabled;
+  }
+
+  function setRowDisabled(tr, disabled) {
+    tr.querySelectorAll('input, select, button').forEach(el => el.disabled = disabled);
+  }
+
+  function showAlert(msg) {
+    const el = document.getElementById('alert-box');
+    el.textContent = msg;
+    el.classList.remove('d-none');
+  }
+
+  function hideAlert() {
+    document.getElementById('alert-box').classList.add('d-none');
+  }
+</script>
+
+</body>
+</html>
