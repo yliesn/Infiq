@@ -14,6 +14,7 @@ $action = $_GET['action'] ?? null;
 match (true) {
     $method === 'GET'                             => handle_get($pdo, $id),
     $method === 'POST' && $action === 'convert'   => handle_convert($pdo, $id),
+    $method === 'POST' && $action === 'duplicate' => handle_duplicate($pdo, $id),
     $method === 'POST'                            => handle_post($pdo),
     $method === 'PUT'   && $id !== null           => handle_put($pdo, $id),
     $method === 'PATCH' && $id !== null           => handle_patch($pdo, $id),
@@ -250,6 +251,52 @@ function handle_convert(PDO $pdo, ?int $id): void {
 
         $pdo->commit();
         json_response(get_document($pdo, $invoice_id), 201);
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        json_response(['error' => $e->getMessage()], 500);
+    }
+}
+
+// ─── POST ?action=duplicate ────────────────────────────────────────────────────
+
+function handle_duplicate(PDO $pdo, ?int $id): void {
+    if (!$id) json_response(['error' => 'id requis'], 400);
+
+    $doc = get_document($pdo, $id);
+    if (!$doc) json_response(['error' => 'Document introuvable'], 404);
+
+    $pdo->beginTransaction();
+    try {
+        $number = next_document_number($pdo, $doc['type']);
+
+        $pdo->prepare('
+            INSERT INTO documents
+                (type, number, client_id, status, issue_date,
+                 subtotal_ht, vat_amount, total_ttc, notes, conditions)
+            VALUES
+                (:type, :number, :client_id, "draft", CURDATE(),
+                 :subtotal_ht, :vat_amount, :total_ttc, :notes, :conditions)
+        ')->execute([
+            ':type'        => $doc['type'],
+            ':number'      => $number,
+            ':client_id'   => $doc['client_id'],
+            ':subtotal_ht' => $doc['subtotal_ht'],
+            ':vat_amount'  => $doc['vat_amount'],
+            ':total_ttc'   => $doc['total_ttc'],
+            ':notes'       => $doc['notes'],
+            ':conditions'  => $doc['conditions'],
+        ]);
+        $new_id = (int)$pdo->lastInsertId();
+
+        $pdo->prepare('
+            INSERT INTO document_lines
+                (document_id, service_id, label, description, qty, unit_price, vat_rate, total_ht, sort_order)
+            SELECT :doc_id, service_id, label, description, qty, unit_price, vat_rate, total_ht, sort_order
+            FROM document_lines WHERE document_id = :src_id
+        ')->execute([':doc_id' => $new_id, ':src_id' => $id]);
+
+        $pdo->commit();
+        json_response(get_document($pdo, $new_id), 201);
     } catch (\Throwable $e) {
         $pdo->rollBack();
         json_response(['error' => $e->getMessage()], 500);

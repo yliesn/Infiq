@@ -14,6 +14,7 @@ match ($method) {
     'GET'    => handle_get($pdo, $id),
     'POST'   => handle_post($pdo),
     'PUT'    => handle_put($pdo, $id),
+    'PATCH'  => handle_patch($pdo, $id),
     'DELETE' => handle_delete($pdo, $id),
     default  => json_response(['error' => 'Méthode non autorisée'], 405),
 };
@@ -93,6 +94,21 @@ function handle_put(PDO $pdo, ?int $id): void {
     $stmt = $pdo->prepare('SELECT * FROM clients WHERE id = ?');
     $stmt->execute([$id]);
     json_response($stmt->fetch());
+}
+
+function handle_patch(PDO $pdo, ?int $id): void {
+    if (!$id) json_response(['error' => 'id requis'], 400);
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    if (!isset($b['is_active'])) json_response(['error' => 'is_active requis'], 422);
+
+    $pdo->prepare('UPDATE clients SET is_active = ? WHERE id = ?')
+        ->execute([$b['is_active'] ? 1 : 0, $id]);
+
+    $stmt = $pdo->prepare('SELECT * FROM clients WHERE id = ?');
+    $stmt->execute([$id]);
+    $client = $stmt->fetch();
+    if (!$client) json_response(['error' => 'Client introuvable'], 404);
+    json_response($client);
 }
 
 function handle_delete(PDO $pdo, ?int $id): void {

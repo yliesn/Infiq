@@ -97,6 +97,9 @@
           <td class="text-end pe-3">${formatMoney(d.total_ttc)}</td>
           <td>${statusBadge('quote', d.status)}</td>
           <td class="text-end pe-3">
+            <button class="btn btn-sm btn-outline-secondary me-1" title="Dupliquer" onclick="duplicate(${d.id})">
+              <i class="bi bi-copy"></i>
+            </button>
             <a href="${API}/pdf.php?id=${d.id}&token=${getToken()}" target="_blank" class="btn btn-sm btn-outline-danger me-1" title="PDF">
               <i class="bi bi-file-earmark-pdf"></i>
             </a>
@@ -128,6 +131,16 @@
     try {
       const inv = await apiFetch(`/documents.php?action=convert&id=${id}`, { method: 'POST' });
       toast('Facture créée : ' + inv.number);
+      load();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function duplicate(id) {
+    try {
+      const doc = await apiFetch(`/documents.php?action=duplicate&id=${id}`, { method: 'POST' });
+      toast('Devis dupliqué : ' + doc.number);
       load();
     } catch (e) {
       toast(e.message, 'error');

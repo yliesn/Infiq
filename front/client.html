@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fiche client — Infiq</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .avatar {
+      width: 64px; height: 64px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; font-weight: 700; color: #fff; flex-shrink: 0;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+    }
+    .hero-meta span { font-size: .85rem; color: #6c757d; }
+    .hero-meta .bi  { font-size: .8rem; }
+    .info-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: #6c757d; font-weight: 600; margin-bottom: .5rem; }
+    .info-row   { display: flex; gap: .5rem; font-size: .9rem; margin-bottom: .35rem; }
+    .info-row .bi { color: #6c757d; flex-shrink: 0; margin-top: .15rem; }
+  </style>
+</head>
+<body class="bg-light">
+
+<div class="d-flex">
+  <div id="nav-placeholder"></div>
+
+  <main class="flex-grow-1 p-4">
+
+    <!-- Retour -->
+    <a href="clients.html" class="btn btn-sm btn-outline-secondary mb-3">
+      <i class="bi bi-arrow-left me-1"></i>Clients
+    </a>
+
+    <!-- ── Hero ──────────────────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center gap-4">
+
+          <div class="avatar" id="hero-avatar">…</div>
+
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <h4 class="mb-0 fw-bold" id="hero-name">Chargement…</h4>
+              <span id="hero-status"></span>
+            </div>
+            <div class="d-flex flex-wrap gap-3 hero-meta" id="hero-meta"></div>
+          </div>
+
+          <div class="d-flex gap-2 flex-shrink-0">
+            <button class="btn btn-sm btn-outline-warning d-none" id="btn-toggle">Désactiver</button>
+            <button class="btn btn-sm btn-primary" id="btn-edit">
+              <i class="bi bi-pencil me-1"></i>Modifier
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cartes infos ───────────────────────────────────────────── -->
+    <div class="row g-3 mb-3">
+
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <p class="info-label">Adresse</p>
+            <div id="info-address"><span class="text-muted fst-italic small">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-4" id="card-legal" style="display:none">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <p class="info-label">Informations légales</p>
+            <div id="info-legal"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-4" id="card-notes" style="display:none">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <p class="info-label">Notes internes</p>
+            <p class="mb-0 small" id="info-notes" style="white-space:pre-wrap"></p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Documents ─────────────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between py-3">
+        <ul class="nav nav-tabs card-header-tabs mb-0" id="doc-tabs">
+          <li class="nav-item"><a class="nav-link active" href="#" data-type="">Tous</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" data-type="quote">Devis</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" data-type="invoice">Factures</a></li>
+        </ul>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-3">N°</th>
+                <th>Type</th>
+                <th>Date</th>
+                <th class="text-end">Montant HT</th>
+                <th class="text-end pe-3">Montant TTC</th>
+                <th>Statut</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="docs-table">
+              <tr><td colspan="7" class="text-center text-muted py-4">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Modal édition ─────────────────────────────────────────────── -->
+<div class="modal fade" id="clientModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Modifier le client</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-alert" class="alert alert-danger d-none"></div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Type *</label>
+            <select id="f-type" class="form-select">
+              <option value="pro">Professionnel</option>
+              <option value="particulier">Particulier</option>
+            </select>
+          </div>
+          <div class="col-md-8" id="company-field">
+            <label class="form-label">Raison sociale</label>
+            <input type="text" id="f-company" class="form-control" placeholder="ACME SAS">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Prénom</label>
+            <input type="text" id="f-firstname" class="form-control">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Nom</label>
+            <input type="text" id="f-lastname" class="form-control">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Email</label>
+            <input type="email" id="f-email" class="form-control">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Téléphone</label>
+            <input type="tel" id="f-phone" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Adresse ligne 1</label>
+            <input type="text" id="f-addr1" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Adresse ligne 2</label>
+            <input type="text" id="f-addr2" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Code postal</label>
+            <input type="text" id="f-postal" class="form-control">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Ville</label>
+            <input type="text" id="f-city" class="form-control">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Pays</label>
+            <input type="text" id="f-country" class="form-control" value="France">
+          </div>
+          <div class="col-md-6" id="siret-field">
+            <label class="form-label">SIRET</label>
+            <input type="text" id="f-siret" class="form-control" maxlength="14">
+          </div>
+          <div class="col-md-6" id="vat-field">
+            <label class="form-label">N° TVA intracommunautaire</label>
+            <input type="text" id="f-vat" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes internes</label>
+            <textarea id="f-notes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/app.js"></script>
+<script>
+  initLayout('clients');
+
+  const clientId = parseInt(new URLSearchParams(location.search).get('id'), 10);
+  if (!clientId) location.href = 'clients.html';
+
+  let modal, client;
+  let activeType = '';
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    modal = new bootstrap.Modal(document.getElementById('clientModal'));
+
+    document.getElementById('btn-edit').addEventListener('click', openModal);
+    document.getElementById('btn-save').addEventListener('click', saveClient);
+    document.getElementById('btn-toggle').addEventListener('click', toggleActive);
+    document.getElementById('f-type').addEventListener('change', toggleProFields);
+
+    document.querySelectorAll('#doc-tabs .nav-link').forEach(tab => {
+      tab.addEventListener('click', e => {
+        e.preventDefault();
+        document.querySelectorAll('#doc-tabs .nav-link').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        activeType = tab.dataset.type;
+        loadDocs();
+      });
+    });
+
+    await loadClient();
+    loadDocs();
+  });
+
+  // ── Données ────────────────────────────────────────────────────────
+
+  async function loadClient() {
+    try {
+      client = await apiFetch(`/clients.php?id=${clientId}`);
+      renderHero();
+      renderInfos();
+    } catch {
+      document.getElementById('hero-name').textContent = 'Client introuvable';
+    }
+  }
+
+  // ── Hero ───────────────────────────────────────────────────────────
+
+  function renderHero() {
+    const name    = client.company_name || `${client.first_name || ''} ${client.last_name || ''}`.trim() || '—';
+    const initials = name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
+    document.title = `${name} — Infiq`;
+    document.getElementById('hero-avatar').textContent = initials;
+    document.getElementById('hero-name').textContent   = name;
+
+    document.getElementById('hero-status').innerHTML = client.is_active
+      ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Actif</span>'
+      : '<span class="badge bg-secondary-subtle text-secondary border">Inactif</span>';
+
+    const metaParts = [];
+    metaParts.push(`<span><i class="bi bi-briefcase"></i> ${client.type === 'pro' ? 'Professionnel' : 'Particulier'}</span>`);
+    if (client.email) metaParts.push(`<span><i class="bi bi-envelope"></i> <a href="mailto:${esc(client.email)}" class="text-decoration-none text-muted">${esc(client.email)}</a></span>`);
+    if (client.phone) metaParts.push(`<span><i class="bi bi-telephone"></i> ${esc(client.phone)}</span>`);
+    if (client.city)  metaParts.push(`<span><i class="bi bi-geo-alt"></i> ${esc(client.city)}</span>`);
+    document.getElementById('hero-meta').innerHTML = metaParts.join('');
+
+    const toggleBtn = document.getElementById('btn-toggle');
+    toggleBtn.classList.remove('d-none');
+    toggleBtn.textContent = client.is_active ? 'Désactiver' : 'Réactiver';
+    toggleBtn.className   = client.is_active
+      ? 'btn btn-sm btn-outline-warning'
+      : 'btn btn-sm btn-outline-success';
+  }
+
+  // ── Cartes infos ───────────────────────────────────────────────────
+
+  function renderInfos() {
+    // Adresse
+    const parts = [
+      client.address_line1, client.address_line2,
+      [client.postal_code, client.city].filter(Boolean).join(' '),
+      client.country && client.country !== 'France' ? client.country : null,
+    ].filter(Boolean);
+
+    document.getElementById('info-address').innerHTML = parts.length
+      ? parts.map(p => `<div class="info-row"><i class="bi bi-geo-alt"></i><span>${esc(p)}</span></div>`).join('').replace(/(<div[^>]*>.*?<\/div>)/, '$1').replace(/bi-geo-alt/g, (_, i) => i === 0 ? 'bi-geo-alt' : 'bi-blank')
+      : '<span class="text-muted fst-italic small">Aucune adresse</span>';
+
+    // version simple sans icône répétée
+    if (parts.length) {
+      document.getElementById('info-address').innerHTML =
+        `<div class="info-row"><i class="bi bi-geo-alt"></i><span>${parts.map(esc).join('<br>')}</span></div>`;
+    }
+
+    // Légal
+    if (client.type === 'pro' && (client.siret || client.vat_number)) {
+      document.getElementById('card-legal').style.display = '';
+      const rows = [];
+      if (client.siret)      rows.push(infoRow('bi-building', 'SIRET', client.siret));
+      if (client.vat_number) rows.push(infoRow('bi-receipt',  'TVA intracom.', client.vat_number));
+      document.getElementById('info-legal').innerHTML = rows.join('');
+    }
+
+    // Notes
+    if (client.notes) {
+      document.getElementById('card-notes').style.display = '';
+      document.getElementById('info-notes').textContent   = client.notes;
+    }
+  }
+
+  function infoRow(icon, label, value) {
+    return `<div class="info-row"><i class="bi ${icon}"></i><span><span class="text-muted small">${label}</span><br>${esc(value)}</span></div>`;
+  }
+
+  // ── Documents ──────────────────────────────────────────────────────
+
+  async function loadDocs() {
+    const tbody = document.getElementById('docs-table');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chargement…</td></tr>';
+    try {
+      let url = `/documents.php?client_id=${clientId}`;
+      if (activeType) url += `&type=${activeType}`;
+      const docs = await apiFetch(url);
+
+      if (!docs.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Aucun document</td></tr>';
+        return;
+      }
+      tbody.innerHTML = docs.map(d => `
+        <tr>
+          <td class="ps-3 fw-semibold">${esc(d.number || '—')}</td>
+          <td><span class="badge bg-light text-dark border">${d.type === 'quote' ? 'Devis' : 'Facture'}</span></td>
+          <td>${formatDate(d.issue_date)}</td>
+          <td class="text-end">${formatMoney(d.subtotal_ht)}</td>
+          <td class="text-end pe-3">${formatMoney(d.total_ttc)}</td>
+          <td>${statusBadge(d.type, d.status)}</td>
+          <td class="pe-2">
+            <a href="document-editor.html?id=${d.id}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-eye"></i>
+            </a>
+          </td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  // ── Modifier ───────────────────────────────────────────────────────
+
+  function openModal() {
+    document.getElementById('modal-alert').classList.add('d-none');
+    document.getElementById('f-type').value      = client.type          || 'pro';
+    document.getElementById('f-company').value   = client.company_name  || '';
+    document.getElementById('f-firstname').value = client.first_name    || '';
+    document.getElementById('f-lastname').value  = client.last_name     || '';
+    document.getElementById('f-email').value     = client.email         || '';
+    document.getElementById('f-phone').value     = client.phone         || '';
+    document.getElementById('f-addr1').value     = client.address_line1 || '';
+    document.getElementById('f-addr2').value     = client.address_line2 || '';
+    document.getElementById('f-postal').value    = client.postal_code   || '';
+    document.getElementById('f-city').value      = client.city          || '';
+    document.getElementById('f-country').value   = client.country       || 'France';
+    document.getElementById('f-siret').value     = client.siret         || '';
+    document.getElementById('f-vat').value       = client.vat_number    || '';
+    document.getElementById('f-notes').value     = client.notes         || '';
+    toggleProFields();
+    modal.show();
+  }
+
+  function toggleProFields() {
+    const isPro = document.getElementById('f-type').value === 'pro';
+    document.getElementById('company-field').classList.toggle('d-none', !isPro);
+    document.getElementById('siret-field').classList.toggle('d-none', !isPro);
+    document.getElementById('vat-field').classList.toggle('d-none', !isPro);
+  }
+
+  async function saveClient() {
+    const body = {
+      type:          document.getElementById('f-type').value,
+      company_name:  document.getElementById('f-company').value   || null,
+      first_name:    document.getElementById('f-firstname').value,
+      last_name:     document.getElementById('f-lastname').value,
+      email:         document.getElementById('f-email').value     || null,
+      phone:         document.getElementById('f-phone').value     || null,
+      address_line1: document.getElementById('f-addr1').value     || null,
+      address_line2: document.getElementById('f-addr2').value     || null,
+      postal_code:   document.getElementById('f-postal').value    || null,
+      city:          document.getElementById('f-city').value      || null,
+      country:       document.getElementById('f-country').value   || 'France',
+      siret:         document.getElementById('f-siret').value     || null,
+      vat_number:    document.getElementById('f-vat').value       || null,
+      notes:         document.getElementById('f-notes').value     || null,
+    };
+    const alertEl = document.getElementById('modal-alert');
+    alertEl.classList.add('d-none');
+    try {
+      client = await apiFetch(`/clients.php?id=${clientId}`, { method: 'PUT', body: JSON.stringify(body) });
+      modal.hide();
+      document.getElementById('card-legal').style.display = 'none';
+      document.getElementById('card-notes').style.display = 'none';
+      renderHero();
+      renderInfos();
+      toast('Client mis à jour');
+    } catch (e) {
+      alertEl.textContent = e.message;
+      alertEl.classList.remove('d-none');
+    }
+  }
+
+  async function toggleActive() {
+    const action = client.is_active ? 'désactiver' : 'réactiver';
+    if (!await confirmAction(`Voulez-vous ${action} ce client ?`)) return;
+    try {
+      client = await apiFetch(`/clients.php?id=${clientId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: client.is_active ? 0 : 1 }),
+      });
+      renderHero();
+      toast(client.is_active ? 'Client réactivé' : 'Client désactivé');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+</script>
+
+</body>
+</html>
